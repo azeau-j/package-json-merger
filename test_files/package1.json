@@ -1,0 +1,48 @@
+{
+  "name": "mooc-back-end",
+  "version": "0.1.0",
+  "description": "",
+  "main": "src/index",
+  "files": [
+    "src"
+  ],
+  "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
+    "bcrypt": "^5.0.1",
+    "body-parser": "^1.17.1",
+    "connect-history-api-fallback": "^1.6.0",
+    "download-file": "^0.1.5",
+    "express": "^4.17.1",
+    "express-recaptcha": "^5.0.1",
+    "nodemailer": "^6.1.1",
+    "nodemailer-smtp-pool": "^2.8.3",
+    "pdf-lib": "^1.2.0"
+  },
+  "devDependencies": {
+    "cookie-session": "^2.0.0-beta.3",
+    "db-migrate": "^0.10.7",
+    "db-migrate-mysql": "^1.1.10",
+    "fs": "0.0.1-security",
+    "nodemon": "^1.11.0",
+    "rimraf": "^2.6.1"
+  },
+  "scripts": {
+    "prestart": "npm run -s config:dev",
+    "start": "nodemon ./src/index.dev.js",
+    "prebuild": "npm run -s config:prod",
+    "build": "npm run -s build:base",
+    "prebuild:staging": "npm run -s config:staging",
+    "build:staging": "npm run -s build:base",
+    "prebuild:base": "npm run -s clean",
+    "build:base": "cp ./database.json ./dist/ && cp -r ./src ./dist/src && cp -r ./migrations ./dist/migrations && mv ./dist/src/index.js ./dist/ && rm ./dist/src/index.dev.js",
+    "config:dev": "node ./config/generate-config.js dev",
+    "config:prod": "node ./config/generate-config.js prod",
+    "config:staging": "node ./config/generate-config.js staging",
+    "clean": "rimraf -r ./dist/*"
+  },
+  "keywords": [],
+  "authors": [
+    "Thomas Kerbrat <kerbrat@outlook.com>"
+  ],
+  "license": "ISC"
+}

@@ -5,6 +5,8 @@ import {Dictionary, PackageJson} from "../types";
 
 export default class Cli {
     private program: Command;
+    private options: CliOptions;
+    private args: string[];
 
     constructor() {
         this.program = new Command();
@@ -14,38 +16,51 @@ export default class Cli {
             .usage("json1 json2 ... target_json")
             .option("-n, --new", "Create target package.json")
             .option("--only-dependencies", "Merge only dependencies, devDependencies and peerDependencies")
+            .option("--name <str>", "'name' field for the new package.json. By default the name in target will be kept, if no target is set the name in the first json will be use")
+            .option("--package-version <str>", "'version' field for the new package.json. By default the version in target will be kept, if no target is set the version in the first json will be use")
+            .option("--description <str>", "'description' field for the new package.json. By default the description in target will be kept, if no target set the description in the first json will be use")
+            .option("--not-merge <str...>", "List of filed to not merge")
+            .option("--verbose", "Show logs")
             .parse(process.argv);
+
+        this.options = {};
+        this.args = [];
     }
 
     public async handleCommand(): Promise<void> {
-        const options: CliOptions = this.program.opts();
-        const args: string[] = this.program.args;
+        this.options = this.program.opts();
+        this.args = this.program.args;
 
-        if (args.length < 3) {
+        if (this.args.length < 3) {
             console.log("You must pass at least, 3 parameters")
             this.program.outputHelp();
             return;
         }
 
-        this.handleOptions(args, options);
+        this.handleOptions();
 
-        this.processMerge(args, options);
+        this.processMerge();
     }
 
-    private handleOptions(args: string[], options: CliOptions): void {
+    private handleOptions(): void {
+        let {options, args} = this;
         if (options.new) {
             const targetFilename: string = args[args.length - 1];
 
             if (fs.existsSync(targetFilename)) {
-                console.log(`File ${targetFilename} already exists. No file will be created.\n`);
+                if (options.verbose)
+                    console.log(`File ${targetFilename} already exists. No file will be created.\n`);
                 return;
             }
             fs.writeFileSync(targetFilename, "{}");
-            console.log(`File ${targetFilename} has been created.\n`);
+
+            if (options.verbose)
+                console.log(`File ${targetFilename} has been created.\n`);
         }
     }
 
-    private processMerge(args: string[], options: CliOptions) {
+    private processMerge() {
+        let {options, args} = this;
         const targetFilename: string = args[args.length - 1];
 
         if (!fs.existsSync(targetFilename)) {
@@ -57,16 +72,99 @@ export default class Cli {
         let targetPackageJson: PackageJson = JSON.parse(data);
         let packagesJson: PackageJson[] = this.loadPackagesJson(args);
 
-
         if (options.onlyDependencies) {
-            this.mergeOnlyDependencies(packagesJson, targetPackageJson, targetFilename);
+            targetPackageJson = this.mergeDependencies(packagesJson, targetPackageJson);
+            fs.writeFileSync(targetFilename, JSON.stringify(targetPackageJson, null, "\t"));
             return;
+        }
+
+        if (options.name)
+            targetPackageJson.name = options.name
+        if (options.packageVersion)
+            targetPackageJson.version = options.packageVersion
+        if (options.description)
+            targetPackageJson.description = options.description
+        targetPackageJson = this.mergeDependencies(packagesJson, targetPackageJson);
+
+        let keys: string[] = Object.keys(targetPackageJson);
+
+        for (let i = 0; i < keys.length; i++) {
+            let key: string = keys[i];
+
+            if (key === "dependencies" || key === "devDependencies" || key === "peerDependencies")
+                continue;
+
+            if (options.notMerge && options.notMerge.includes(key))
+                continue;
+
+            let typeOfValue: string = typeof targetPackageJson[key]
+
+            if (typeOfValue == "string")
+                continue;
+
+            if (isDictionary(targetPackageJson[key])) {
+                if (options.verbose)
+                    console.log(`Merge "${key}"`);
+                this.mergeDictionariesField([targetPackageJson, ...packagesJson], targetPackageJson, key);
+            }
+        }
+
+        for (let i = 0; i < packagesJson.length; i++) {
+            let packageJson = packagesJson[i];
+            let keys: string[] = Object.keys(packageJson);
+
+            for (let i = 0; i < keys.length; i++) {
+                let key: string = keys[i];
+
+                if (key === "dependencies" || key === "devDependencies" || key === "peerDependencies")
+                    continue;
+
+                if (options.notMerge && options.notMerge.includes(key))
+                    continue;
+
+                let typeOfValue: string = typeof packageJson[key]
+
+                if (typeOfValue === "string" || typeOfValue === 'booleans') {
+                    if (packageJson[key] === undefined) {
+                        if (options.verbose)
+                            console.log(`Copy "${key}" to target`);
+                        targetPackageJson[key] = packageJson[key]
+                    }
+                }
+
+                if (isArrayOfStrings(packageJson[key])) {
+                    if (options.verbose)
+                        console.log(`Merge "${key}"`);
+                    targetPackageJson = this.mergeListField([targetPackageJson, ...packagesJson], targetPackageJson, key)
+                    continue;
+                }
+
+                if (isDictionary(packageJson[key])) {
+                    if (options.verbose)
+                        console.log(`Merge "${key}"`);
+                    targetPackageJson = this.mergeDictionariesField([targetPackageJson, ...packagesJson], targetPackageJson, key);
+                }
+            }
         }
 
         fs.writeFileSync(targetFilename, JSON.stringify(targetPackageJson, null, "\t"));
     }
 
-    private mergeOnlyDependencies(packagesJson: PackageJson[], targetPackageJson: PackageJson, targetFilename: string) {
+    private mergeListField(packagesJson: PackageJson[], targetPackageJson: PackageJson, fieldName: string): PackageJson {
+        let data = packagesJson.filter(pkg => pkg[fieldName] !== undefined).map(pkg => pkg[fieldName]);
+        /*if (data.length > 0)
+            console.log(data)*/
+        return targetPackageJson;
+    }
+
+    private mergeDictionariesField(packagesJson: PackageJson[], targetPackageJson: PackageJson, fieldName: string): PackageJson {
+        let data = packagesJson.filter(pkg => pkg[fieldName] !== undefined).map(pkg => pkg[fieldName]);
+        if (data.length > 0)
+            targetPackageJson[fieldName] = mergeDictionaries(data as Dictionary<string>[]);
+        return targetPackageJson;
+    }
+
+    private mergeDependencies(packagesJson: PackageJson[], targetPackageJson: PackageJson): PackageJson {
         let dependencies = packagesJson.filter(pkg => pkg.dependencies !== undefined).map(pkg => pkg.dependencies);
         if (dependencies.length > 0)
             targetPackageJson.dependencies = mergeDictionaries(dependencies as Dictionary<string>[]);
@@ -79,7 +177,7 @@ export default class Cli {
         if (peerDependencies.length > 0)
             targetPackageJson.peerDependencies = mergeDictionaries(peerDependencies as Dictionary<string>[]);
 
-        fs.writeFileSync(targetFilename, JSON.stringify(targetPackageJson, null, "\t"));
+        return targetPackageJson;
     }
 
     private loadPackagesJson(args: string[]): PackageJson[] {
@@ -91,8 +189,19 @@ export default class Cli {
             packagesJson.push(packageJson);
         }
 
+        if (this.options.verbose)
+            console.log(`${packagesJson.length} json loaded !\n`)
+
         return packagesJson;
     }
+}
+
+function isArrayOfStrings(value: any): value is string[] {
+    return Array.isArray(value) && value.every(item => typeof item === 'string');
+}
+
+function isDictionary<T>(value: any): value is Dictionary<T> {
+    return typeof value === 'object' && value !== null;
 }
 
 function mergeDictionaries<T>(dicts: Dictionary<T>[]): Dictionary<T> {

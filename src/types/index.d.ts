@@ -4,36 +4,16 @@ export interface PackageJson {
     description?: string;
     keywords?: string[];
     homepage?: string;
-    bugs?: {
-        url?: string;
-        email?: string;
-    };
+    bugs?: Bugs;
     license?: string;
-    author?: string | {
-        name: string;
-        email?: string;
-        url?: string;
-    };
-    contributors?: string[] | {
-        name: string;
-        email?: string;
-        url?: string;
-    }[];
+    author?: string | Author;
+    contributors?: string[] | Contributor[];
     files?: string[];
     main?: string;
     bin?: string | Dictionary<string>;
     man?: string | string[];
-    directories?: {
-        lib?: string;
-        bin?: string;
-        man?: string;
-        doc?: string;
-        example?: string;
-    };
-    repository?: {
-        type: string;
-        url: string;
-    };
+    directories?: Directories;
+    repository?: Repository;
     scripts?: Dictionary<string>;
     config?: Dictionary<any>;
     dependencies?: Dictionary<string>;
@@ -46,10 +26,41 @@ export interface PackageJson {
     cpu?: string[];
     private?: boolean;
     publishConfig?: Dictionary<string>;
+    [key: string]: any;
 }
 
 type Dictionary<T> = {
     [key: string]: T;
+};
+
+type Bugs = {
+    url?: string;
+    email?: string;
+};
+
+type Author = {
+    name: string;
+    email?: string;
+    url?: string;
+};
+
+type Contributor = {
+    name: string;
+    email?: string;
+    url?: string;
+};
+
+type Directories = {
+    lib?: string;
+    bin?: string;
+    man?: string;
+    doc?: string;
+    example?: string;
+};
+
+type Repository = {
+    type: string;
+    url: string;
 };
 
 /*export interface PackageJson {
